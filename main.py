@@ -44,7 +44,7 @@ def register(user: UserCreate):
     db_user = create_user(user_id, user.email, hashed, user.full_name)
     return UserOut(id=db_user["id"], email=db_user["email"], full_name=db_user["full_name"])
 
-# ← UPDATED LOGIN ROUTE
+# LOGIN ROUTE
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     db_user = get_user_by_email(form_data.username)
