@@ -1,75 +1,66 @@
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from dotenv import load_dotenv
+from typing import Optional
 import os
 
-# === Correct relative imports ===
 from schemas.user import UserCreate, UserLogin, UserOut
 from models.user import create_user, get_user_by_email, fake_users_db
-from auth.jwt_handler import create_access_token
+from auth.jwt_handler import create_access_token, verify_token
 
 load_dotenv()
 
-app = FastAPI(title="My FastAPI Auth Project")
+app = FastAPI(title="FastAPI User Auth API", version="1.0.0")
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# === Helper Functions ===
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+# === Helpers ===
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
 
 def get_password_hash(password: str) -> str:
-    # bcrypt limit: 72 bytes
     if len(password.encode('utf-8')) > 72:
-        raise HTTPException(
-            status_code=400,
-            detail="Password too long. Maximum 72 characters allowed."
-        )
+        raise HTTPException(status_code=400, detail="Password too long (max 72 chars)")
     return pwd_context.hash(password)
 
-# === Routes ===
+def get_current_user(token: str = Depends(oauth2_scheme)) -> Optional[dict]:
+    email = verify_token(token)
+    if not email:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
 
+# === Routes ===
 @app.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(user: UserCreate):
-    # Check if user exists
     if get_user_by_email(user.email):
-        raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
-        )
-
-    # Hash password
-    hashed_password = get_password_hash(user.password)
-
-    # Create user (assign ID)
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed = get_password_hash(user.password)
     user_id = len(fake_users_db) + 1
-    db_user = create_user(
-        user_id=user_id,
-        email=user.email,
-        hashed_password=hashed_password,
-        full_name=user.full_name
-    )
-
-    # Return user without password
+    db_user = create_user(user_id, user.email, hashed, user.full_name)
     return UserOut(id=db_user["id"], email=db_user["email"], full_name=db_user["full_name"])
 
-
+# ← UPDATED LOGIN ROUTE
 @app.post("/login")
-def login(user: UserLogin):
-    db_user = get_user_by_email(user.email)
-    if not db_user or not verify_password(user.password, db_user["hashed_password"]):
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    db_user = get_user_by_email(form_data.username)
+    if not db_user or not verify_password(form_data.password, db_user["hashed_password"]):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": "Bearer"}
         )
+    token = create_access_token({"sub": form_data.username})
+    return {"access_token": token, "token_type": "bearer"}
 
-    # Create JWT token
-    access_token = create_access_token(data={"sub": user.email})
-
-    return {"access_token": access_token, "token_type": "bearer"}
+@app.get("/me", response_model=UserOut)
+def read_users_me(current_user: dict = Depends(get_current_user)):
+    return UserOut(
+        id=current_user["id"],
+        email=current_user["email"],
+        full_name=current_user["full_name"]
+    )

@@ -1,0 +1,22 @@
+[project]
+name = "fastapi-user-auth-api"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Harshitha",email = "harshithashettym1@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi (>=0.121.0,<0.122.0)",
+    "uvicorn (>=0.38.0,<0.39.0)",
+    "python-dotenv (>=1.2.1,<2.0.0)",
+    "passlib (>=1.7.4,<2.0.0)",
+    "python-jose (>=3.5.0,<4.0.0)",
+    "pydantic (>=2.12.4,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
